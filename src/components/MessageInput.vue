@@ -5,6 +5,7 @@
       class="messageTextArea"
       @input="autoResize"
       :value="textInput"
+      @keyup.enter="sendMessage"
     ></textarea>
     <img
       src="@/assets/send-image.svg"
