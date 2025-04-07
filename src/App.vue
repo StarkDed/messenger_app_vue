@@ -1,7 +1,7 @@
 <template>
   <div class="app">
     <Header></Header>
-    <ChatContainer :messages="messages"></ChatContainer>
+    <ChatContainer :messages="messages" @send="addMessage"></ChatContainer>
   </div>
 </template>
 
@@ -52,6 +52,13 @@ const messages = reactive([
     id: 9,
   },
 ]);
+
+const addMessage = (textMessage) => {
+  messages.push({
+    text: textMessage,
+    id: Date.now(),
+  });
+};
 </script>
 
 <style >

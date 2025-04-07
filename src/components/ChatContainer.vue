@@ -1,7 +1,7 @@
 <template>
   <div class="chatContainer">
     <ChatList :messages="messages"></ChatList>
-    <MessageInput></MessageInput>
+    <MessageInput @send="$emit('send', $event)"></MessageInput>
   </div>
 </template>
 

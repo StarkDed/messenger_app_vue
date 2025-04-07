@@ -4,16 +4,36 @@
       placeholder="Message..."
       class="messageTextArea"
       @input="autoResize"
+      :value="textInput"
     ></textarea>
-    <img src="@/assets/send-image.svg" class="sendButton" alt="Send" />
+    <img
+      src="@/assets/send-image.svg"
+      class="sendButton"
+      alt="Send"
+      @click="sendMessage"
+    />
   </div>
 </template>
 
 <script setup>
+import { ref } from "vue";
+
+const textInput = ref("");
+
 const autoResize = (event) => {
   const textarea = event.target;
+  textInput.value = textarea.value;
   textarea.style.height = "auto";
   textarea.style.height = textarea.scrollHeight + "px";
+};
+
+const emit = defineEmits(["send"]);
+
+const sendMessage = () => {
+  if (textInput.value.trim()) {
+    emit("send", textInput.value);
+    textInput.value = "";
+  }
 };
 </script>
 
