@@ -1,13 +1,57 @@
 <template>
   <div class="app">
     <Header></Header>
-    <ChatContainer></ChatContainer>
+    <ChatContainer :messages="messages"></ChatContainer>
   </div>
 </template>
 
 <script setup>
 import Header from "@/components/Header.vue";
 import ChatContainer from "@/components/ChatContainer.vue";
+import { reactive } from "vue";
+
+const messages = reactive([
+  {
+    text: "Message",
+    id: 1,
+  },
+  {
+    text: "Message",
+    id: 2,
+  },
+  {
+    text: "Message",
+    id: 2,
+  },
+  {
+    text: "Message",
+    id: 3,
+  },
+  {
+    text: "Message",
+    id: 4,
+  },
+  {
+    text: "Message",
+    id: 5,
+  },
+  {
+    text: "Message",
+    id: 6,
+  },
+  {
+    text: "Message",
+    id: 7,
+  },
+  {
+    text: "Message",
+    id: 8,
+  },
+  {
+    text: "Message",
+    id: 9,
+  },
+]);
 </script>
 
 <style >

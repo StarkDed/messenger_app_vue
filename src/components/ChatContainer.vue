@@ -1,6 +1,6 @@
 <template>
   <div class="chatContainer">
-    <ChatList></ChatList>
+    <ChatList :messages="messages"></ChatList>
     <MessageInput></MessageInput>
   </div>
 </template>
@@ -8,6 +8,13 @@
 <script setup>
 import MessageInput from "@/components/MessageInput.vue";
 import ChatList from "@/components/ChatList.vue";
+
+defineProps({
+  messages: {
+    type: Array,
+    required: true,
+  },
+});
 </script>
 
 <style scoped>
