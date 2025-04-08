@@ -1,14 +1,24 @@
 <template>
   <div class="app">
     <Header></Header>
-    <ChatContainer :messages="messages" @send="addMessage"></ChatContainer>
+    <AuthForm v-if="!authStore.isAuthenticated"></AuthForm>
+    <ChatContainer
+      v-else
+      :messages="messages"
+      @send="addMessage"
+    ></ChatContainer>
   </div>
 </template>
 
 <script setup>
 import Header from "@/components/Header.vue";
 import ChatContainer from "@/components/ChatContainer.vue";
+import AuthForm from "@/components/AuthForm.vue";
+import { useAuthStore } from "@/store/authenticationStore.js";
+
 import { reactive } from "vue";
+
+const authStore = useAuthStore();
 
 const messages = reactive([
   {
