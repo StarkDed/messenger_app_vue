@@ -9,17 +9,27 @@
         message_others: message.style === 'others',
       }"
     ></Message>
+    <span class="line" ref="bottom" tabindex="-1"></span>
   </div>
 </template>
 
 <script setup>
 import Message from "@/components/Message.vue";
+import { ref, onMounted } from "vue";
+
+const bottom = ref(null);
 
 defineProps({
   messages: {
     type: Array,
     required: true,
   },
+});
+
+onMounted(() => {
+  if (bottom.value) {
+    bottom.value.focus();
+  }
 });
 </script>
 
@@ -37,5 +47,9 @@ defineProps({
 }
 .chatWindow h1 {
   font-size: 16px;
+}
+
+.line {
+  width: 100%;
 }
 </style>
