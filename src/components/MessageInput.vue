@@ -1,11 +1,12 @@
 <template>
   <div class="messageInput">
     <textarea
+      ref="textarea"
       placeholder="Message..."
       class="messageTextArea"
       @input="autoResize"
       :value="textInput"
-      @keyup.enter="sendMessage"
+      @keyup.enter="handleEnter"
     ></textarea>
     <img
       src="@/assets/send-image.svg"
@@ -20,12 +21,22 @@
 import { ref } from "vue";
 
 const textInput = ref("");
+const textarea = ref(null);
 
 const autoResize = (event) => {
   const textarea = event.target;
-  textInput.value = textarea.value;
   textarea.style.height = "auto";
-  textarea.style.height = textarea.scrollHeight + "px";
+  const maxHeight = 157;
+
+  if (textarea.scrollHeight > maxHeight) {
+    textarea.style.overflowY = "auto";
+    textarea.style.height = `${maxHeight}px`;
+  } else {
+    textarea.style.overflowY = "hidden";
+    textarea.style.height = `${textarea.scrollHeight}px`;
+  }
+
+  textInput.value = textarea.value;
 };
 
 const emit = defineEmits(["send"]);
@@ -34,6 +45,16 @@ const sendMessage = () => {
   if (textInput.value.trim()) {
     emit("send", textInput.value);
     textInput.value = "";
+
+    textarea.value.style.height = "auto";
+  }
+};
+
+const handleEnter = (event) => {
+  if (event.shiftKey) {
+    return;
+  } else {
+    sendMessage();
   }
 };
 </script>

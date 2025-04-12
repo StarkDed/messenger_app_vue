@@ -77,6 +77,7 @@ const addMessage = (textMessage) => {
   messages.push({
     text: textMessage,
     id: Date.now(),
+    style: "mine",
   });
 };
 </script>
