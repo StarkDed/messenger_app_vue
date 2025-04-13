@@ -3,16 +3,17 @@
     <div class="authForm">
       <div class="form-group">
         <label for="login">Login</label>
-        <input type="text" id="login" />
+        <input type="text" id="login" v-model="username" />
       </div>
       <div class="form-group">
         <label for="password">Password</label>
-        <input type="password" id="password" />
+        <input type="password" id="password" v-model="password" />
       </div>
       <div v-if="isReg" class="form-group">
         <label for="repeatPassword">Confirm password</label>
-        <input type="password" id="repeatPassword" />
+        <input type="password" id="repeatPassword" v-model="repeatPassword" />
       </div>
+      <div v-if="error" class="error-message">{{ error }}</div>
       <button @click="handleLoginRegButton" class="loginRegButton">
         {{ textButton }}
       </button>
@@ -25,12 +26,49 @@
 
 <script setup>
 import { ref } from "vue";
+import { useAuthStore } from "@/store/authenticationStore.js";
+import { useRouter } from 'vue-router';
 
+const router = useRouter();
+const authStore = useAuthStore();
+const username = ref("");
+const password = ref("");
+const repeatPassword = ref("");
+const error = ref("");
 const textButton = ref("Login");
 const textToggleButton = ref("Registration");
 const isReg = ref(false);
 
-const handleLoginRegButton = () => {};
+const handleLoginRegButton = async () => {
+  error.value = "";
+  
+  if (isReg.value) {
+    // Регистрация
+    if (password.value !== repeatPassword.value) {
+      error.value = "Пароли не совпадают";
+      return;
+    }
+    if (authStore.users.some(u => u.username === username.value)) {
+      error.value = "Пользователь с таким именем уже существует";
+      return;
+    }
+    const newUser = {
+      id: Date.now(),
+      username: username.value,
+      password: password.value
+    };
+    authStore.users.push(newUser);
+    // Сохраняем обновленный список пользователей в localStorage
+    localStorage.setItem('users', JSON.stringify(authStore.users));
+    // Логиним нового пользователя
+    authStore.login(username.value, password.value);
+  } else {
+    // Вход
+    if (!authStore.login(username.value, password.value)) {
+      error.value = "Неверное имя пользователя или пароль";
+    }
+  }
+};
 
 const handleToggleButton = () => {
   [textButton.value, textToggleButton.value] = [
@@ -38,6 +76,7 @@ const handleToggleButton = () => {
     textButton.value,
   ];
   isReg.value = !isReg.value;
+  error.value = "";
 };
 </script>
 
@@ -98,6 +137,12 @@ button {
   margin-top: 10px;
   background: transparent;
   color: #808082;
+}
+
+.error-message {
+  color: #ff6b6b;
+  margin-bottom: 10px;
+  text-align: center;
 }
 
 button:active {

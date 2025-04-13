@@ -7,6 +7,7 @@
       :class="{
         message_mine: message.style === 'mine',
         message_others: message.style === 'others',
+        message_system: message.style === 'system'
       }"
     ></Message>
     <span class="line" ref="bottom" tabindex="-1"></span>
@@ -51,5 +52,15 @@ onMounted(() => {
 
 .line {
   width: 100%;
+}
+
+.message_system {
+  align-self: center;
+  background-color: rgba(255, 255, 255, 0.1);
+  padding: 5px 10px;
+  border-radius: 15px;
+  margin: 5px 0;
+  font-style: italic;
+  color: #888;
 }
 </style>

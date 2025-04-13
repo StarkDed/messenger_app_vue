@@ -1,8 +1,8 @@
 <template>
   <div class="message">
-    <span class="name">{{ message.name }}</span>
+    <span v-if="message.style !== 'system'" class="name">{{ message.name }}</span>
     <p class="text">{{ message.text }}</p>
-    <time class="date">{{ formattedDate }}</time>
+    <time v-if="message.style !== 'system'" class="date">{{ formattedDate }}</time>
   </div>
 </template>
 
@@ -43,26 +43,38 @@ const formattedDate = computed(() => {
   flex-direction: column;
   align-items: flex-start;
 }
+
 .name {
   color: #757575;
 }
+
 .text {
   overflow-wrap: break-word;
   white-space: pre-line;
   word-break: break-word;
 }
+
 .date {
   color: #757575;
   align-self: flex-end;
   margin-top: 2px;
 }
+
 .message_mine {
   align-self: flex-end;
   background: #262a35;
 }
+
 .message_others {
   align-self: flex-start;
   background: #373e4e;
+}
+
+.message_system {
+  align-self: center;
+  background: rgba(255, 255, 255, 0.1);
+  max-width: 80%;
+  text-align: center;
 }
 
 @media (max-width: 768px) {
