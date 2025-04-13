@@ -98,6 +98,7 @@ const addMessage = (textMessage) => {
     text: textMessage,
     id: Date.now(),
     style: "mine",
+    date: Date.now(),
   });
 };
 </script>
