@@ -99,4 +99,11 @@ const handleEnter = (event) => {
 .sendButton:hover {
   opacity: 0.8;
 }
+
+@media (max-width: 800px) {
+  .messageInput {
+    bottom: 0;
+    border-radius: 3px;
+  }
+}
 </style>
