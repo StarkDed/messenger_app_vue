@@ -7,31 +7,51 @@
       :class="{
         message_mine: message.style === 'mine',
         message_others: message.style === 'others',
-        message_system: message.style === 'system'
+        message_system: message.style === 'system',
       }"
     ></Message>
-    <span class="line" ref="bottom" tabindex="-1"></span>
+    <div class="line" ref="bottom"></div>
   </div>
 </template>
 
 <script setup>
 import Message from "@/components/Message.vue";
-import { ref, onMounted } from "vue";
+import { ref, onMounted, watch, nextTick } from "vue";
 
 const bottom = ref(null);
 
-defineProps({
+const props = defineProps({
   messages: {
     type: Array,
     required: true,
   },
 });
 
-onMounted(() => {
+const scrollToBottom = async () => {
+  await nextTick();
   if (bottom.value) {
-    bottom.value.focus();
+    bottom.value.scrollIntoView({
+      behavior: "smooth",
+      block: "end",
+    });
   }
-});
+};
+
+watch(
+  () => props.messages,
+  () => scrollToBottom(),
+  { immediate: true }
+);
+
+watch(
+  () => [...props.messages],
+  (newMessages, oldMessages) => {
+    const addedMessages = newMessages.slice(oldMessages.length);
+    const hasMyMessages = addedMessages.some((msg) => msg.style === "mine");
+
+    if (hasMyMessages) scrollToBottom();
+  }
+);
 </script>
 
 <style scoped>
@@ -51,6 +71,7 @@ onMounted(() => {
 }
 
 .line {
+  height: 1px;
   width: 100%;
 }
 
