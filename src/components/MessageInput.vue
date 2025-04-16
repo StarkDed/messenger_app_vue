@@ -6,7 +6,7 @@
       class="messageTextArea"
       @input="autoResize"
       :value="textInput"
-      @keyup.enter="handleEnter"
+      @keydown.enter="handleEnter"
     ></textarea>
     <img
       src="@/assets/send-image.svg"
@@ -54,6 +54,7 @@ const handleEnter = (event) => {
   if (event.shiftKey) {
     return;
   } else {
+    event.preventDefault();
     sendMessage();
   }
 };
