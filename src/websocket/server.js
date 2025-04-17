@@ -6,16 +6,22 @@ const wss = new WebSocketServer({ port: 8080 });
 // Хранилище для всех подключенных клиентов
 const clients = new Map(); // Теперь храним клиентов с их пользователями
 
+// Хранилище для активных сессий пользователей
+const activeSessions = new Map(); // userId -> Set of WebSocket connections
+
+// Хранилище для логинов и их ID
+const userLogins = new Map(); // username -> userId
+
 // Хранилище для сообщений
 const messageHistory = [];
 
 // Функция для отправки сообщения всем клиентам
-const broadcastMessage = (message, sender) => {
+const broadcastMessage = (message, sender, isMine = false) => {
     clients.forEach((user, client) => {
         if (client !== sender && client.readyState === WebSocket.OPEN) {
             client.send(JSON.stringify({
                 ...message,
-                isMine: false
+                isMine: isMine && user.id === message.userId
             }));
         }
     });
@@ -30,10 +36,33 @@ wss.on('connection', (ws) => {
             const data = JSON.parse(message);
             
             if (data.type === 'auth') {
-                // Аутентификация пользователя
+                const username = data.username;
+                const userId = data.userId; // Используем ID с клиента
+
+                // Сохраняем связь логина и ID
+                userLogins.set(username, userId);
+
+                // Проверяем, есть ли уже активные сессии для этого пользователя
+                const existingSessions = activeSessions.get(userId) || new Set();
+                
+                // Если это первая сессия пользователя, отправляем системное сообщение
+                if (existingSessions.size === 0) {
+                    const systemMessage = {
+                        type: 'system',
+                        message: `${username} присоединился к чату`
+                    };
+                    messageHistory.push(systemMessage);
+                    broadcastMessage(systemMessage, ws);
+                }
+
+                // Добавляем новое соединение к сессиям пользователя
+                existingSessions.add(ws);
+                activeSessions.set(userId, existingSessions);
+
+                // Сохраняем информацию о пользователе
                 clients.set(ws, {
-                    id: data.userId,
-                    username: data.username
+                    id: userId,
+                    username: username
                 });
 
                 // Отправляем историю сообщений новому клиенту
@@ -41,20 +70,8 @@ wss.on('connection', (ws) => {
                     type: 'history',
                     messages: messageHistory.map(msg => ({
                         ...msg,
-                        isMine: msg.userId === data.userId
+                        isMine: msg.userId === userId
                     }))
-                }));
-
-                // Отправляем системное сообщение о входе
-                const systemMessage = {
-                    type: 'system',
-                    message: `${data.username} присоединился к чату`
-                };
-                messageHistory.push(systemMessage);
-                broadcastMessage(systemMessage, ws);
-                ws.send(JSON.stringify({
-                    ...systemMessage,
-                    isMine: true
                 }));
 
             } else if (data.type === 'message') {
@@ -73,12 +90,14 @@ wss.on('connection', (ws) => {
                 // Сохраняем сообщение в историю
                 messageHistory.push(messageObj);
 
-                // Отправляем сообщение всем клиентам
-                broadcastMessage(messageObj, ws);
+                // Отправляем сообщение отправителю
                 ws.send(JSON.stringify({
                     ...messageObj,
                     isMine: true
                 }));
+
+                // Отправляем сообщение всем остальным клиентам
+                broadcastMessage(messageObj, ws, true);
             }
 
         } catch (error) {
@@ -91,21 +110,40 @@ wss.on('connection', (ws) => {
         const user = clients.get(ws);
         if (user) {
             console.log(`Пользователь ${user.username} отключился`);
-            clients.delete(ws);
             
-            // Отправляем системное сообщение об отключении
-            const systemMessage = {
-                type: 'system',
-                message: `${user.username} покинул чат`
-            };
-            messageHistory.push(systemMessage);
-            broadcastMessage(systemMessage, null);
+            // Удаляем соединение из активных сессий пользователя
+            const userSessions = activeSessions.get(user.id);
+            if (userSessions) {
+                userSessions.delete(ws);
+                if (userSessions.size === 0) {
+                    // Если это была последняя сессия пользователя
+                    const systemMessage = {
+                        type: 'system',
+                        message: `${user.username} покинул чат`
+                    };
+                    messageHistory.push(systemMessage);
+                    broadcastMessage(systemMessage, null);
+                    activeSessions.delete(user.id);
+                }
+            }
+            
+            clients.delete(ws);
         }
     });
 
     // Обработка ошибок
     ws.on('error', (error) => {
         console.error('WebSocket ошибка:', error);
+        const user = clients.get(ws);
+        if (user) {
+            const userSessions = activeSessions.get(user.id);
+            if (userSessions) {
+                userSessions.delete(ws);
+                if (userSessions.size === 0) {
+                    activeSessions.delete(user.id);
+                }
+            }
+        }
         clients.delete(ws);
     });
 });

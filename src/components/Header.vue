@@ -7,7 +7,7 @@
       </button>
       <div class="dropdown-menu" v-if="isMenuOpen">
         <span class="username">{{ authStore.currentUser.username }}</span>
-        <button class="button-exit">Выйти</button>
+        <button class="button-exit" @click="authStore.logout">Выйти</button>
       </div>
     </div>
   </header>
