@@ -1,5 +1,5 @@
 <template>
-  <div class="message" @click.right.prevent="toggleMenuMessage">
+  <div class="message" @click.right.prevent="openMenuMessage">
     <span v-if="message.style !== 'system'" class="name">{{
       message.name
     }}</span>
@@ -7,7 +7,7 @@
     <time v-if="message.style !== 'system'" class="date">{{
       formattedDate
     }}</time>
-    <div class="menuMessage" v-if="isMenuMessageOpen">
+    <div class="menuMessage" v-if="isMenuMessageOpen" :style="menuPosition">
       <button @click="editMessage">Изменить</button>
       <button>Удалить</button>
     </div>
@@ -45,10 +45,37 @@ const formattedDate = computed(() => {
 
 // Открытие menuMessage
 const isMenuMessageOpen = ref(false);
+const menuPosition = ref({ top: "0", left: "0" });
 
 const toggleMenuMessage = (event) => {
   if (props.message.style === "mine") {
     isMenuMessageOpen.value = !isMenuMessageOpen.value;
+  }
+};
+
+const openMenuMessage = (event) => {
+  if (!isMenuMessageOpen.value) {
+    const messageElement = event.currentTarget;
+    const rect = messageElement.getBoundingClientRect();
+
+    const menuWidth = 100;
+
+    let x = event.clientX - rect.left - menuWidth / 2;
+    let y = event.clientY - rect.top;
+
+    if (x < 0) x = 0;
+
+    const maxX = rect.width - menuWidth;
+    if (x > maxX) x = maxX;
+
+    menuPosition.value = {
+      top: `${y}px`,
+      left: `${x}px`,
+    };
+
+    isMenuMessageOpen.value = true;
+  } else {
+    isMenuMessageOpen.value = false;
   }
 };
 
@@ -57,6 +84,7 @@ const toggleMenuMessage = (event) => {
 const editMessage = () => {
   editMessageStore.isEditMessage = true;
   editMessageStore.editedMessage = { ...props.message };
+  isMenuMessageOpen.value = false;
 };
 </script>
 
@@ -110,8 +138,8 @@ const editMessage = () => {
   background: #1f232f;
   width: 100px;
   position: absolute;
-  top: 100%;
-  left: 17%;
+  /* top: 100%;
+  left: 17%; */
   border-radius: 2px;
   z-index: 800;
 }
