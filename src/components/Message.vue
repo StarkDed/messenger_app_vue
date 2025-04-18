@@ -1,17 +1,30 @@
 <template>
-  <div class="message">
-    <span v-if="message.style !== 'system'" class="name">{{ message.name }}</span>
+  <div class="message" @click.right.prevent="toggleMenuMessage">
+    <span v-if="message.style !== 'system'" class="name">{{
+      message.name
+    }}</span>
     <p class="text">{{ message.text }}</p>
-    <time v-if="message.style !== 'system'" class="date">{{ formattedDate }}</time>
+    <time v-if="message.style !== 'system'" class="date">{{
+      formattedDate
+    }}</time>
+    <div class="menuMessage" v-if="isMenuMessageOpen">
+      <button @click="editMessage">Изменить</button>
+      <button>Удалить</button>
+    </div>
   </div>
 </template>
 
 <script setup>
-import { computed } from "vue";
+import { computed, ref, defineProps } from "vue";
+import { useEditMessageStore } from "@/store/editStore.js";
+
+const editMessageStore = useEditMessageStore();
 
 const props = defineProps({
   message: [Object],
 });
+
+// работа с датой
 
 function formatDate(date) {
   let hours = date.getHours();
@@ -29,6 +42,22 @@ const formattedDate = computed(() => {
   const date = new Date(props.message.date);
   return formatDate(date);
 });
+
+// Открытие menuMessage
+const isMenuMessageOpen = ref(false);
+
+const toggleMenuMessage = (event) => {
+  if (props.message.style === "mine") {
+    isMenuMessageOpen.value = !isMenuMessageOpen.value;
+  }
+};
+
+// событие кнопки edit
+
+const editMessage = () => {
+  editMessageStore.isEditMessage = true;
+  editMessageStore.editedMessage = { ...props.message };
+};
 </script>
 
 <style scoped>
@@ -42,6 +71,7 @@ const formattedDate = computed(() => {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
+  position: relative;
 }
 
 .name {
@@ -76,7 +106,32 @@ const formattedDate = computed(() => {
   max-width: 80%;
   text-align: center;
 }
-
+.menuMessage {
+  background: #1f232f;
+  width: 100px;
+  position: absolute;
+  top: 100%;
+  left: 17%;
+  border-radius: 2px;
+  z-index: 800;
+}
+.menuMessage button {
+  color: white;
+  width: 100%;
+  border: none;
+  padding: 10px 5px;
+  background: transparent;
+  cursor: pointer;
+  font-size: 16px;
+}
+.menuMessage button:hover {
+  opacity: 0.5;
+}
+.menuMessage button:active {
+  color: #1f232f;
+  background: white;
+  opacity: 1;
+}
 @media (max-width: 768px) {
   .message {
     max-width: 80%;
