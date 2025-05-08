@@ -53,7 +53,11 @@ const handleIncomingMessage = (data) => {
 
 onMounted(() => {
   // Подключаемся к WebSocket с данными текущего пользователя
-  wsClient.connect(authStore.currentUser);
+  wsClient.connect({
+    username: authStore.currentUser.username,
+    password: authStore.currentUser.password,
+    isRegistration: false
+  });
   wsClient.onMessage(handleIncomingMessage);
 });
 

@@ -12,36 +12,14 @@ export const useAuthStore = defineStore("autherification", {
     };
   },
   actions: {
-    login(username, password) {
-      // Получаем историю пользователей
-      const usersHistory = JSON.parse(localStorage.getItem('usersHistory') || '{}');
-      let user;
-      
-      // Проверяем, есть ли пользователь в истории
-      if (usersHistory[username]) {
-        // Если есть, используем сохраненный ID
-        user = {
-          id: usersHistory[username],
-          username,
-          password
-        };
-      } else {
-        // Если нет, создаем новый ID и сохраняем в историю
-        const newId = Date.now();
-        user = {
-          id: newId,
-          username,
-          password
-        };
-        usersHistory[username] = newId;
-        localStorage.setItem('usersHistory', JSON.stringify(usersHistory));
-      }
-      
+    setUser(user) {
       this.isAuthenticated = true;
       this.currentUser = user;
       // Сохраняем данные текущего пользователя
-      localStorage.setItem('currentUser', JSON.stringify(user));
-      return true;
+      localStorage.setItem('currentUser', JSON.stringify({
+        id: user.id,
+        username: user.username
+      }));
     },
     logout() {
       this.isAuthenticated = false;

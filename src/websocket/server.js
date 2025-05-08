@@ -1,4 +1,6 @@
 import { WebSocketServer } from 'ws';
+import { User, Message, syncDatabase } from '../database/index.js';
+import bcrypt from 'bcrypt';
 
 // Создаем WebSocket сервер
 const wss = new WebSocketServer({ port: 8080 });
@@ -9,11 +11,10 @@ const clients = new Map(); // Теперь храним клиентов с их
 // Хранилище для активных сессий пользователей
 const activeSessions = new Map(); // userId -> Set of WebSocket connections
 
-// Хранилище для логинов и их ID
-const userLogins = new Map(); // username -> userId
-
 // Хранилище для сообщений
 const messageHistory = [];
+
+syncDatabase();
 
 // Функция для отправки сообщения всем клиентам
 const broadcastMessage = (message, sender, isMine = false) => {
@@ -27,54 +28,139 @@ const broadcastMessage = (message, sender, isMine = false) => {
     });
 };
 
+// Функция для регистрации нового пользователя
+const registerUser = async (username, password) => {
+    try {
+        // Проверяем, существует ли пользователь
+        const existingUser = await User.findOne({ where: { username }});
+        if (existingUser) {
+            return { success: false, message: 'Пользователь с таким именем уже существует'};
+        }
+
+        // Хешируем пароль
+        const saltRounds = 10;
+        const passwordHash = await bcrypt.hash(password, saltRounds);
+
+        // Создаем нового пользователя
+        const user = await User.create({
+            username: username,
+            password_hash: passwordHash
+        });
+
+        console.log(`Пользователь ${user.username} зарегистрирован`);
+
+        return { success: true, user: { id: user.id, username: user.username }};
+    } catch (error) {
+        console.error('Ошибка при регистрации пользователя:', error);
+        return { success: false, message: 'Ошибка при регистрации пользователя'};
+    }
+}
+
+// Функция для авторизации пользователя
+const loginUser = async (username, password) => {
+    try {
+        // Проверяем, существует ли пользователь
+        const user = await User.findOne({ where: { username }});
+        if (!user) {
+            return { success: false, message: 'Пользователь с таким именем не найден' };
+        }
+
+        // Проверяем пароль
+        const passwordMatch = await bcrypt.compare(password, user.password_hash);
+        if (!passwordMatch) {
+            return { success: false, message: 'Неверный пароль' };
+        }
+
+        console.log(`Пользователь ${user.username} авторизован`);
+
+        return { success: true, user: { id: user.id, username: user.username}};
+    } catch (error) {
+        console.error('Ошибка при авторизации пользователя:', error);
+        return { success: false, message: 'Ошибка при авторизации пользователя'};
+    }
+}
+
+// Функция для загрузки истории сообщений
+const loadMessageHistory = async () => {
+    try {
+        // Загружаем все сообщения из базы данных
+        const messages = await Message.findAll({
+            include: [{
+                model: User,
+                attributes: ['username']
+            }],
+            order: [['date_and_time', 'ASC']]
+        });
+
+        // Преобразуем сообщения в формат для отправки клиенту
+        return messages.map(msg => ({
+            type: 'message',
+            content: msg.content,
+            timestamp: msg.date_and_time.toISOString(),
+            userId: msg.user_id,
+            username: msg.User.username
+        }));
+    } catch (error) {
+        console.error('Ошибка при загрузке истории сообщений:', error);
+        return [];
+    }
+}
+
 wss.on('connection', (ws) => {
     console.log('Новое подключение');
 
     // Обработка входящих сообщений
-    ws.on('message', (message) => {
+    ws.on('message', async (message) => {
         try {
             const data = JSON.parse(message);
-            
-            if (data.type === 'auth') {
-                const username = data.username;
-                const userId = data.userId; // Используем ID с клиента
 
-                // Сохраняем связь логина и ID
-                userLogins.set(username, userId);
-
-                // Проверяем, есть ли уже активные сессии для этого пользователя
-                const existingSessions = activeSessions.get(userId) || new Set();
-                
-                // Если это первая сессия пользователя, отправляем системное сообщение
-                if (existingSessions.size === 0) {
-                    const systemMessage = {
-                        type: 'system',
-                        message: `${username} присоединился к чату`
-                    };
-                    messageHistory.push(systemMessage);
-                    broadcastMessage(systemMessage, ws);
-                }
-
-                // Добавляем новое соединение к сессиям пользователя
-                existingSessions.add(ws);
-                activeSessions.set(userId, existingSessions);
-
-                // Сохраняем информацию о пользователе
-                clients.set(ws, {
-                    id: userId,
-                    username: username
-                });
-
-                // Отправляем историю сообщений новому клиенту
+            if (data.type === 'register') {
+                const result = await registerUser(data.username, data.password);
                 ws.send(JSON.stringify({
-                    type: 'history',
-                    messages: messageHistory.map(msg => ({
-                        ...msg,
-                        isMine: msg.userId === userId
-                    }))
+                    type: 'register_response',
+                    ...result
                 }));
+            }
+            else if (data.type === 'login') {
+                const result = await loginUser(data.username, data.password);
 
-            } else if (data.type === 'message') {
+                if (result.success) {
+                    // Проверяем, есть ли уже активные сессии для этого пользователя
+                    const existingSessions = activeSessions.get(result.user.id) || new Set();
+
+                    // Если это первая сессия пользователя, отправляем системное сообщение
+                    if (existingSessions.size === 0) {
+                        const systemMessage = {
+                            type: 'system',
+                            message: `${result.user.username} присоединился к чату`
+                        };
+                        messageHistory.push(systemMessage);
+                        broadcastMessage(systemMessage, ws);
+                    }
+
+                    // Добавляем новое соединение к сессиям пользователя
+                    existingSessions.add(ws);
+                    activeSessions.set(result.user.id, existingSessions);
+
+                    // Загружаем историю сообщений из базы данных
+                    const dbMessageHistory = await loadMessageHistory();
+                    messageHistory.push(...dbMessageHistory);
+
+                    // Отправляем историю сообщений новому клиенту
+                    ws.send(JSON.stringify({
+                        type: 'history',
+                        messages: messageHistory.map(msg => ({
+                            ...msg,
+                            isMine: msg.userId === result.user.id
+                        }))
+                    }));
+                }
+                ws.send(JSON.stringify({
+                    type: 'login_response',
+                    ...result
+                }));
+            }
+            else if (data.type === 'message') {
                 const user = clients.get(ws);
                 if (!user) return;
 

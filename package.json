@@ -9,6 +9,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "bcrypt": "^5.1.1",
     "pg": "^8.15.6",
     "pg-hstore": "^2.3.4",
     "pinia": "^3.0.1",
