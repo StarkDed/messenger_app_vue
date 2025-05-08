@@ -6,8 +6,4 @@ const app = createApp(App);
 
 app.use(createPinia());
 
-// components.forEach((component) => {
-//   app.component(component.name, component);
-// });
-
 app.mount("#app");

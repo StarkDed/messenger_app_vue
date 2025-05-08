@@ -1,6 +1,6 @@
 import { defineStore } from "pinia";
 
-export const useAuthStore = defineStore("autherification", {
+export const useAuthStore = defineStore("authentication", {
   state: () => {
     // Проверяем наличие сохраненного пользователя
     const storedUser = localStorage.getItem('currentUser');

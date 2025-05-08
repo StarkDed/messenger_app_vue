@@ -27,10 +27,8 @@
 <script setup>
 import { ref } from "vue";
 import { useAuthStore } from "@/store/authenticationStore.js";
-import { useRouter } from 'vue-router';
 import wsClient from '../websocket/client.js';
 
-const router = useRouter();
 const authStore = useAuthStore();
 const username = ref("");
 const password = ref("");
@@ -59,48 +57,22 @@ const handleLoginRegButton = async () => {
       isRegistration: isReg.value
     });
 
-    // Обработка ответа от сервера
-    wsClient.onMessage((data) => {
-      if (data.type === 'login_response' || data.type === 'register_response') {
-        if (data.success) {
-          authStore.setUser(data.user);
-          // router.push('/chat');
-        }
-        else {
-          error.value = data.error;
-        }
-      }
-    });
-
     wsClient.onError((err) => {
       error.value = err;
+      return;
+    });
+
+    wsClient.onConnection((user) => {
+      if (user) {
+        authStore.setUser(user);
+      }
+      else {
+        error.value = "Неверное имя пользователя или пароль";
+      }
     });
   } catch (err) {
     error.value = err.message;
   }
-
-    
-    // if (authStore.users.some(u => u.username === username.value)) {
-    //   error.value = "Пользователь с таким именем уже существует";
-    //   return;
-    // }
-    
-    // const newUser = {
-    //   id: Date.now(),
-    //   username: username.value,
-    //   password: password.value
-    // };
-    // authStore.users.push(newUser);
-    // // Сохраняем обновленный список пользователей в localStorage
-    // localStorage.setItem('users', JSON.stringify(authStore.users));
-    // // Логиним нового пользователя
-    // authStore.login(username.value, password.value);
-  // } else {
-    // // Вход
-    // if (!authStore.login(username.value, password.value)) {
-    //   error.value = "Неверное имя пользователя или пароль";
-    // }
-  // }
 };
 
 const handleToggleButton = () => {
