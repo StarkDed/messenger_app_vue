@@ -6,10 +6,7 @@ import bcrypt from 'bcrypt';
 const wss = new WebSocketServer({ port: 8080 });
 
 // Хранилище для всех подключенных клиентов
-const clients = new Map(); // Теперь храним клиентов с их пользователями
-
-// Хранилище для активных сессий пользователей
-const activeSessions = new Map(); // userId -> Set of WebSocket connections
+const clients = new Map();
 
 // Хранилище для сообщений
 let messageHistory = [];
@@ -18,13 +15,15 @@ syncDatabase();
 
 // Функция для отправки сообщения всем клиентам
 const broadcastMessage = (message, sender, isMine = false) => {
-    clients.forEach((clientWS, username) => {
-        if (clientWS !== sender && clientWS.readyState === WebSocket.OPEN) {
-            clientWS.send(JSON.stringify({
-                ...message,
-                isMine: isMine && username === message.username
-            }));
-        }
+    clients.forEach((sessions, username) => {
+        sessions.forEach(clientWS => {
+            if (clientWS !== sender && clientWS.readyState === WebSocket.OPEN) {
+                clientWS.send(JSON.stringify({
+                    ...message,
+                    isMine: isMine && username === message.username
+                }));
+            }
+        });
     });
 };
 
@@ -124,7 +123,7 @@ wss.on('connection', (ws) => {
                     messageHistory.push(...dbMessageHistory);
 
                     // Проверяем, есть ли уже активные сессии для этого пользователя
-                    const existingSessions = activeSessions.get(result.user.username) || new Set();
+                    const existingSessions = clients.get(result.user.username) || new Set();
 
                     // Если это первая сессия пользователя, отправляем системное сообщение
                     if (existingSessions.size === 0) {
@@ -138,8 +137,7 @@ wss.on('connection', (ws) => {
 
                     // Добавляем новое соединение к сессиям пользователя
                     existingSessions.add(ws);
-                    activeSessions.set(result.user.username, existingSessions);
-                    clients.set(result.user.username, ws);
+                    clients.set(result.user.username, existingSessions);
 
                     // Отправляем историю сообщений новому клиенту
                     ws.send(JSON.stringify({
@@ -158,7 +156,13 @@ wss.on('connection', (ws) => {
             }
             else if (data.type === 'get_history') {
                 // Заменяем старое соединение на новое для корректной отправки сообщений всем пользователям
-                clients.set(data.username, ws);
+                const userSessions = clients.get(data.username) || new Set();
+                userSessions.forEach(clientWS => {
+                    if (clientWS.readyState === WebSocket.CLOSED) {
+                        userSessions.delete(clientWS);
+                    }
+                });
+                userSessions.add(ws);
 
                 // Отправляем историю сообщений новому клиенту
                 const dbMessageHistory = await loadMessageHistory();
@@ -231,13 +235,13 @@ wss.on('connection', (ws) => {
 
     // Обработка отключения клиента
     ws.on('close', () => {
-        const username = Array.from(clients.entries()).find(([_, value]) => value === ws)?.[0];
+        const username = Array.from(clients.entries()).find(([_, sessions]) => sessions.has(ws))?.[0];
         
         if (username) {
             console.log(`Пользователь ${username} отключился`);
             
             // Удаляем соединение из активных сессий пользователя
-            const userSessions = activeSessions.get(username);
+            const userSessions = clients.get(username);
 
             if (userSessions) {
                 userSessions.delete(ws);
@@ -249,30 +253,27 @@ wss.on('connection', (ws) => {
                         message: `${username} покинул чат`
                     };
                     broadcastMessage(systemMessage, null);
-                    activeSessions.delete(username);
+                    clients.delete(username);
                 }
             }
-            
-            clients.delete(username);
         }
     });
 
     // Обработка ошибок
     ws.on('error', (error) => {
         console.error('WebSocket ошибка:', error);
-        const username = Array.from(clients.entries()).find(([_, value]) => value === ws)?.[0];
+        const username = Array.from(clients.entries()).find(([_, sessions]) => sessions.has(ws))?.[0];
+
 
         if (username) {
-            const userSessions = activeSessions.get(username);
+            const userSessions = clients.get(username);
             if (userSessions) {
                 userSessions.delete(ws);
                 if (userSessions.size === 0) {
-                    activeSessions.delete(username);
+                    clients.delete(username);
                 }
             }
         }
-
-        clients.delete(username);
     });
 });
 
