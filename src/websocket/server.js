@@ -12,17 +12,17 @@ const clients = new Map(); // Теперь храним клиентов с их
 const activeSessions = new Map(); // userId -> Set of WebSocket connections
 
 // Хранилище для сообщений
-const messageHistory = [];
+let messageHistory = [];
 
 syncDatabase();
 
 // Функция для отправки сообщения всем клиентам
 const broadcastMessage = (message, sender, isMine = false) => {
-    clients.forEach((user, client) => {
-        if (client !== sender && client.readyState === WebSocket.OPEN) {
-            client.send(JSON.stringify({
+    clients.forEach((clientWS, username) => {
+        if (clientWS !== sender && clientWS.readyState === WebSocket.OPEN) {
+            clientWS.send(JSON.stringify({
                 ...message,
-                isMine: isMine && user.id === message.userId
+                isMine: isMine && username === message.username
             }));
         }
     });
@@ -95,7 +95,7 @@ const loadMessageHistory = async () => {
         // Преобразуем сообщения в формат для отправки клиенту
         return messages.map(msg => ({
             type: 'message',
-            content: msg.content,
+            content: msg.text,
             timestamp: msg.date_and_time.toISOString(),
             userId: msg.user_id,
             username: msg.User.username
@@ -107,26 +107,24 @@ const loadMessageHistory = async () => {
 }
 
 wss.on('connection', (ws) => {
-    console.log('Новое подключение');
-
     // Обработка входящих сообщений
     ws.on('message', async (message) => {
         try {
             const data = JSON.parse(message);
 
-            if (data.type === 'register') {
-                const result = await registerUser(data.username, data.password);
-                ws.send(JSON.stringify({
-                    type: 'register_response',
-                    ...result
-                }));
-            }
-            else if (data.type === 'login') {
-                const result = await loginUser(data.username, data.password);
+            if (data.type === 'register' || data.type === 'login') {
+                const result = data.type === 'register' 
+                    ? await registerUser(data.username, data.password)
+                    : await loginUser(data.username, data.password);
 
                 if (result.success) {
+                    // Очищаем и загружаем историю сообщений из базы данных
+                    messageHistory = [];
+                    const dbMessageHistory = await loadMessageHistory();
+                    messageHistory.push(...dbMessageHistory);
+
                     // Проверяем, есть ли уже активные сессии для этого пользователя
-                    const existingSessions = activeSessions.get(result.user.id) || new Set();
+                    const existingSessions = activeSessions.get(result.user.username) || new Set();
 
                     // Если это первая сессия пользователя, отправляем системное сообщение
                     if (existingSessions.size === 0) {
@@ -140,11 +138,8 @@ wss.on('connection', (ws) => {
 
                     // Добавляем новое соединение к сессиям пользователя
                     existingSessions.add(ws);
-                    activeSessions.set(result.user.id, existingSessions);
-
-                    // Загружаем историю сообщений из базы данных
-                    const dbMessageHistory = await loadMessageHistory();
-                    messageHistory.push(...dbMessageHistory);
+                    activeSessions.set(result.user.username, existingSessions);
+                    clients.set(result.user.username, ws);
 
                     // Отправляем историю сообщений новому клиенту
                     ws.send(JSON.stringify({
@@ -155,37 +150,80 @@ wss.on('connection', (ws) => {
                         }))
                     }));
                 }
+
                 ws.send(JSON.stringify({
-                    type: 'login_response',
+                    type: data.type === 'register' ? 'register_response' : 'login_response',
                     ...result
                 }));
             }
-            else if (data.type === 'message') {
-                const user = clients.get(ws);
-                if (!user) return;
+            else if (data.type === 'get_history') {
+                // Заменяем старое соединение на новое для корректной отправки сообщений всем пользователям
+                clients.set(data.username, ws);
 
-                // Создаем объект сообщения с информацией о пользователе
-                const messageObj = {
-                    type: 'message',
-                    content: data.content,
-                    timestamp: new Date().toISOString(),
-                    userId: user.id,
-                    username: user.username
-                };
-
-                // Сохраняем сообщение в историю
-                messageHistory.push(messageObj);
-
-                // Отправляем сообщение отправителю
+                // Отправляем историю сообщений новому клиенту
+                const dbMessageHistory = await loadMessageHistory();
                 ws.send(JSON.stringify({
-                    ...messageObj,
-                    isMine: true
+                    type: 'history',
+                    messages: dbMessageHistory.map(msg => ({
+                        ...msg,
+                        isMine: msg.userId === data.userId
+                    }))
                 }));
-
-                // Отправляем сообщение всем остальным клиентам
-                broadcastMessage(messageObj, ws, true);
             }
+            else if (data.type === 'message') {
+                const userWS = clients.get(data.username);
+                if (userWS) {
+                    const timestamp = new Date().toISOString();
+                    
+                    // Создаем объект сообщения с информацией о пользователе
+                    const messageObj = {
+                        type: 'message',
+                        content: data.content,
+                        timestamp: timestamp,
+                        userId: data.userId,
+                        username: data.username
+                    };
+                    
+                    // Отправляем сообщение отправителю
+                    ws.send(JSON.stringify({
+                        ...messageObj,
+                        isMine: true
+                    }));
 
+                    try {
+                        await Message.create({
+                            user_id: data.userId,
+                            text: data.content,
+                            date_and_time: timestamp
+                        });
+                    } catch (error) {
+                        console.error("Не удалось сохранить сообщение в базу данных:", error);
+                        ws.send(JSON.stringify({
+                            type: 'error',
+                            message: 'Сообщение не отправлено'
+                        }));
+                        return;
+                    }
+                    
+                    // Отправляем сообщение всем остальным клиентам
+                    broadcastMessage(messageObj, ws, true);
+                }
+            }
+            else if (data.type === 'logout') {
+                try {
+                    ws.send(JSON.stringify({
+                        type: 'logout_response',
+                        success: true
+                    }));
+                } catch (error) {
+                    console.error('Ошибка при выходе из чата:', error);
+                    ws.send(JSON.stringify({
+                        type: 'logout_response',
+                        success: false,
+                        message: 'Ошибка при выходе из чата: ' + error.message
+                    }));
+                }
+            }
         } catch (error) {
             console.error('Ошибка обработки сообщения:', error);
         }
@@ -193,44 +231,48 @@ wss.on('connection', (ws) => {
 
     // Обработка отключения клиента
     ws.on('close', () => {
-        const user = clients.get(ws);
-        if (user) {
-            console.log(`Пользователь ${user.username} отключился`);
+        const username = Array.from(clients.entries()).find(([_, value]) => value === ws)?.[0];
+        
+        if (username) {
+            console.log(`Пользователь ${username} отключился`);
             
             // Удаляем соединение из активных сессий пользователя
-            const userSessions = activeSessions.get(user.id);
+            const userSessions = activeSessions.get(username);
+
             if (userSessions) {
                 userSessions.delete(ws);
+
                 if (userSessions.size === 0) {
                     // Если это была последняя сессия пользователя
                     const systemMessage = {
                         type: 'system',
-                        message: `${user.username} покинул чат`
+                        message: `${username} покинул чат`
                     };
-                    messageHistory.push(systemMessage);
                     broadcastMessage(systemMessage, null);
-                    activeSessions.delete(user.id);
+                    activeSessions.delete(username);
                 }
             }
             
-            clients.delete(ws);
+            clients.delete(username);
         }
     });
 
     // Обработка ошибок
     ws.on('error', (error) => {
         console.error('WebSocket ошибка:', error);
-        const user = clients.get(ws);
-        if (user) {
-            const userSessions = activeSessions.get(user.id);
+        const username = Array.from(clients.entries()).find(([_, value]) => value === ws)?.[0];
+
+        if (username) {
+            const userSessions = activeSessions.get(username);
             if (userSessions) {
                 userSessions.delete(ws);
                 if (userSessions.size === 0) {
-                    activeSessions.delete(user.id);
+                    activeSessions.delete(username);
                 }
             }
         }
-        clients.delete(ws);
+
+        clients.delete(username);
     });
 });
 

@@ -1,5 +1,5 @@
 import { defineStore } from "pinia";
-
+import wsClient from "@/websocket/client";
 export const useAuthStore = defineStore("authentication", {
   state: () => {
     // Проверяем наличие сохраненного пользователя
@@ -24,7 +24,7 @@ export const useAuthStore = defineStore("authentication", {
     logout() {
       this.isAuthenticated = false;
       this.currentUser = null;
-      // Удаляем только текущего пользователя, но сохраняем историю
+      // Удаляем текущего пользователя
       localStorage.removeItem('currentUser');
     }
   }

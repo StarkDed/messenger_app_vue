@@ -6,7 +6,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted, onUnmounted } from 'vue';
+import { ref, onMounted, onUnmounted, nextTick } from 'vue';
 import MessageInput from "@/components/MessageInput.vue";
 import ChatList from "@/components/ChatList.vue";
 import wsClient from '@/websocket/client.js';
@@ -19,14 +19,24 @@ const handleSendMessage = (text) => {
   wsClient.sendMessage(text);
 };
 
+onMounted(() => {
+  if (!authStore.isAuthenticated) {
+    wsClient.logout();
+    authStore.logout();
+  }
+  nextTick(() => {
+    wsClient.onMessage(handleIncomingMessage);
+    wsClient.onError(handleError);
+  });
+});
+
 // Обработчик входящих сообщений
 const handleIncomingMessage = (data) => {
   switch (data.type) {
     case 'history':
       // Загружаем историю сообщений
       messages.value = data.messages.map(msg => ({
-        text: msg.content || msg.message,
-        id: Date.now() + Math.random(),
+        text: msg.content || msg.message || msg.text,
         style: msg.isMine ? "mine" : (msg.type === 'system' ? "system" : "others"),
         name: msg.username,
         date: msg.timestamp
@@ -35,7 +45,6 @@ const handleIncomingMessage = (data) => {
     case 'message':
       messages.value.push({
         text: data.content,
-        id: Date.now(),
         style: data.isMine ? "mine" : "others",
         name: data.username,
         date: data.timestamp
@@ -44,25 +53,18 @@ const handleIncomingMessage = (data) => {
     case 'system':
       messages.value.push({
         text: data.message,
-        id: Date.now(),
         style: "system"
       });
       break;
   }
 };
 
-onMounted(() => {
-  // Подключаемся к WebSocket с данными текущего пользователя
-  wsClient.connect({
-    username: authStore.currentUser.username,
-    password: authStore.currentUser.password,
-    isRegistration: false
-  });
-  wsClient.onMessage(handleIncomingMessage);
-});
+const handleError = (error) => {
+  console.error("Ошибка при соединении с сервером:", error);
+};
 
 onUnmounted(() => {
-  wsClient.disconnect();
+  authStore.logout();
 });
 </script>
 

@@ -16,7 +16,7 @@
 
 <script setup>
 import Message from "@/components/Message.vue";
-import { ref, onMounted, watch, nextTick } from "vue";
+import { ref, watch, nextTick } from "vue";
 
 const bottom = ref(null);
 

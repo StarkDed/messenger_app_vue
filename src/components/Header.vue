@@ -7,21 +7,28 @@
       </button>
       <div class="dropdown-menu" v-if="isMenuOpen">
         <span class="username">{{ authStore.currentUser.username }}</span>
-        <button class="button-exit" @click="authStore.logout">Выйти</button>
+        <button class="button-exit" @click="handleLogout">Выйти</button>
       </div>
     </div>
   </header>
 </template>
 
 <script setup>
-import { ref } from "vue";
+import { ref, nextTick } from "vue";
 import { useAuthStore } from "@/store/authenticationStore.js";
+import wsClient from "@/websocket/client.js";
 
 const authStore = useAuthStore();
 const isMenuOpen = ref(false);
 
 const toggleMenu = () => {
   isMenuOpen.value = !isMenuOpen.value;
+};
+
+const handleLogout = () => {
+  wsClient.logout();
+  authStore.logout();
+  isMenuOpen.value = false;
 };
 
 defineOptions({
