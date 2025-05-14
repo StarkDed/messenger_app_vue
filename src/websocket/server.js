@@ -1,6 +1,10 @@
 import { WebSocketServer } from 'ws';
 import { User, Message, syncDatabase } from '../database/index.js';
 import bcrypt from 'bcrypt';
+import dotenv from "dotenv";
+import jwt from 'jsonwebtoken';
+
+dotenv.config();
 
 // Создаем WebSocket сервер
 const wss = new WebSocketServer({ port: 8080 });
@@ -48,7 +52,13 @@ const registerUser = async (username, password) => {
 
         console.log(`Пользователь ${user.username} зарегистрирован`);
 
-        return { success: true, user: { id: user.id, username: user.username }};
+        const payload = {
+            id: user.id,
+            username: user.username
+        }
+        const token = jwt.sign(payload, process.env.VUE_APP_VERY_SECRET_KEY, { expiresIn: '1h' });
+        
+        return { success: true, user: { username: user.username }, token: token};
     } catch (error) {
         console.error('Ошибка при регистрации пользователя:', error);
         return { success: false, message: 'Ошибка при регистрации пользователя'};
@@ -72,7 +82,13 @@ const loginUser = async (username, password) => {
 
         console.log(`Пользователь ${user.username} авторизован`);
 
-        return { success: true, user: { id: user.id, username: user.username}};
+        const payload = {
+            id: user.id,
+            username: user.username
+        }
+        const token = jwt.sign(payload, process.env.VUE_APP_VERY_SECRET_KEY, { expiresIn: '1h' });
+
+        return { success: true, user: { username: user.username }, token: token};
     } catch (error) {
         console.error('Ошибка при авторизации пользователя:', error);
         return { success: false, message: 'Ошибка при авторизации пользователя'};
@@ -96,7 +112,6 @@ const loadMessageHistory = async () => {
             type: 'message',
             content: msg.text,
             timestamp: msg.date_and_time.toISOString(),
-            userId: msg.user_id,
             username: msg.User.username
         }));
     } catch (error) {
@@ -109,13 +124,12 @@ wss.on('connection', (ws) => {
     // Обработка входящих сообщений
     ws.on('message', async (message) => {
         try {
-            const data = JSON.parse(message);
+            let data = JSON.parse(message);
 
             if (data.type === 'register' || data.type === 'login') {
                 const result = data.type === 'register' 
                     ? await registerUser(data.username, data.password)
                     : await loginUser(data.username, data.password);
-
                 if (result.success) {
                     // Очищаем и загружаем историю сообщений из базы данных
                     messageHistory = [];
@@ -144,17 +158,58 @@ wss.on('connection', (ws) => {
                         type: 'history',
                         messages: messageHistory.map(msg => ({
                             ...msg,
-                            isMine: msg.userId === result.user.id
+                            isMine: msg.username === result.user.username
                         }))
                     }));
                 }
 
                 ws.send(JSON.stringify({
                     type: data.type === 'register' ? 'register_response' : 'login_response',
-                    ...result
+                    success: result.success,
+                    username: result.user.username,
+                    token: result.token
+                }));
+                return;
+            } 
+            // else if (data.type === 'logout') {
+            //     try {
+            //         ws.send(JSON.stringify({
+            //             type: 'logout_response',
+            //             success: true
+            //         }));
+            //     } catch (error) {
+            //         console.error('Ошибка при выходе из чата:', error);
+            //         ws.send(JSON.stringify({
+            //             type: 'logout_response',
+            //             success: false,
+            //             message: 'Ошибка при выходе из чата: ' + error.message
+            //         }));
+            //     }
+            // }
+            else {
+                try {
+                    const decodedToken = jwt.verify(data.token, process.env.VUE_APP_VERY_SECRET_KEY) 
+                    
+                    data = {
+                        ...data,
+                        ...decodedToken
+                    }
+                } catch(error) {
+                    console.error("Ошибка при декодировании токена:", error)
+                    ws.send(JSON.stringify({
+                        type: 'jwt_error',
+                        message: error
+                    }));
+                    return;
+                }
+            }
+            if (data.type === "get_username") {
+                ws.send(JSON.stringify({
+                    type: "username_response",
+                    username: data.username
                 }));
             }
-            else if (data.type === 'get_history') {
+            else if (data.type === 'get_history') {                    
                 // Заменяем старое соединение на новое для корректной отправки сообщений всем пользователям
                 const userSessions = clients.get(data.username) || new Set();
                 userSessions.forEach(clientWS => {
@@ -170,7 +225,8 @@ wss.on('connection', (ws) => {
                     type: 'history',
                     messages: dbMessageHistory.map(msg => ({
                         ...msg,
-                        isMine: msg.userId === data.userId
+                        username: data.username,
+                        isMine: msg.username === data.username
                     }))
                 }));
             }
@@ -184,7 +240,6 @@ wss.on('connection', (ws) => {
                         type: 'message',
                         content: data.content,
                         timestamp: timestamp,
-                        userId: data.userId,
                         username: data.username
                     };
                     
@@ -196,40 +251,28 @@ wss.on('connection', (ws) => {
 
                     try {
                         await Message.create({
-                            user_id: data.userId,
+                            user_id: data.id,
                             text: data.content,
                             date_and_time: timestamp
                         });
+
+                        // Отправляем сообщение всем остальным клиентам
+                        broadcastMessage(messageObj, ws, true);
                     } catch (error) {
                         console.error("Не удалось сохранить сообщение в базу данных:", error);
                         ws.send(JSON.stringify({
                             type: 'error',
                             message: 'Сообщение не отправлено'
                         }));
-                        return;
                     }
-                    
-                    // Отправляем сообщение всем остальным клиентам
-                    broadcastMessage(messageObj, ws, true);
-                }
-            }
-            else if (data.type === 'logout') {
-                try {
-                    ws.send(JSON.stringify({
-                        type: 'logout_response',
-                        success: true
-                    }));
-                } catch (error) {
-                    console.error('Ошибка при выходе из чата:', error);
-                    ws.send(JSON.stringify({
-                        type: 'logout_response',
-                        success: false,
-                        message: 'Ошибка при выходе из чата: ' + error.message
-                    }));
                 }
             }
         } catch (error) {
-            console.error('Ошибка обработки сообщения:', error);
+            console.error('Ошибка:', error);
+            ws.send(JSON.stringify({
+                type: 'error',
+                message: error
+            }));
         }
     });
 

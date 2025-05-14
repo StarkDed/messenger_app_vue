@@ -4,13 +4,14 @@ class WebSocketClient {
         this.messageHandlers = new Set();
         this.connectionHandlers = new Set();
         this.errorHandlers = new Set();
-        const storedUser = localStorage.getItem('currentUser');
-        this.user = storedUser ? JSON.parse(storedUser) : null;
+        this.usernameHandlers = new Set();
+        const storedToken = localStorage.getItem('currentUser');
+        this.token = storedToken ? storedToken : null;
         this.messageBuffer = [];
-        
+
         // Автоматически подключаемся, если есть сохраненный пользователь
-        if (this.user) {
-            this.connect({ username: this.user.username, password: '', isRegistration: false });
+        if (this.token) {
+            this.connect(null);
         }
     }
 
@@ -21,8 +22,8 @@ class WebSocketClient {
         // Обрабатываем открытие соединения
         this.ws.onopen = () => {
             console.log('Подключено к WebSocket серверу');
-            
-            if (this.user) {
+
+            if (this.token) {
                 this.getMessageHistory();
             }
             else {
@@ -40,8 +41,10 @@ class WebSocketClient {
                     const data = JSON.parse(event.data);
                     if (data.type === 'login_response' || data.type === 'register_response') {
                         if (data.success) {
-                            this.user = data.user
-                            this.connectionHandlers.forEach(handler => handler(this.user));
+                            this.token = data.token;
+                            localStorage.setItem('currentUser', data.token);
+
+                            this.connectionHandlers.forEach(handler => handler(true));
                         }
                         else {
                             this.errorHandlers.forEach(handler => handler(data.message));
@@ -52,12 +55,25 @@ class WebSocketClient {
                         this.messageHandlers.forEach(handler => handler(data));
                     }
                     else if (data.type === 'message') {
+                        this.ws.send(JSON.stringify({
+                            token: this.token
+                        }));
+
                         this.messageBuffer.push(data);
                         this.messageHandlers.forEach(handler => handler(data));
                     }
                     else if (data.type === 'history') {
                         this.messageBuffer.push(data);
                         this.messageHandlers.forEach(handler => handler(data));
+                    }
+                    else if (data.type === 'username_response') {
+                        this.usernameHandlers.forEach(handler => handler(data.username));
+                    }
+                    else if (data.type === 'jwt_error') {
+                        // выходить из аккаунта
+                        this.errorHandlers.forEach(handler => handler(data.message));
+                        this.connectionHandlers.forEach(handler => handler(false));
+                        this.logout();
                     }
                     else if (data.type === 'error') {
                         this.errorHandlers.forEach(handler => handler(data.message));
@@ -74,8 +90,17 @@ class WebSocketClient {
             
             this.ws.onclose = () => {
                 console.log('WebSocket соединение закрыто');
-                this.connectionHandlers.forEach(handler => handler(null));
+                this.connectionHandlers.forEach(handler => handler(false));
             };
+        }
+    }
+
+    getUsername(token) {
+        if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+            this.ws.send(JSON.stringify({
+                type: "get_username",
+                token: token
+            }));
         }
     }
 
@@ -83,32 +108,32 @@ class WebSocketClient {
         if (this.ws && this.ws.readyState === WebSocket.OPEN) {
             this.ws.send(JSON.stringify({
                 type: 'get_history',
-                userId: this.user.id,
-                username: this.user.username
+                token: this.token
             }));
         }
     }
 
     logout() {
         if (this.ws && this.ws.readyState === WebSocket.OPEN) {
-            this.ws.send(JSON.stringify({
-                type: 'logout',
-                username: this.user.username
-            }));
+            // this.ws.send(JSON.stringify({
+            //     type: 'logout'
+            // }));
+
+            this.connectionHandlers.forEach(handler => handler(false));
+            this.disconnect();
         }
 
-        this.ws.onmessage = (event) => {
-            const data = JSON.parse(event.data);
-            if (data.type === 'logout_response') {
-                if (data.success) {
-                    this.connectionHandlers.forEach(handler => handler(null));
-                    this.disconnect();
-                }
-                else {
-                    this.errorHandlers.forEach(handler => handler(data.message));
-                }
-            }
-        }   
+        // this.ws.onmessage = (event) => {
+        //     const data = JSON.parse(event.data);
+        //     if (data.type === 'logout_response') {
+        //         if (data.success) {
+                    
+        //         }
+        //         else {
+        //             this.errorHandlers.forEach(handler => handler(data.message));
+        //         }
+        //     }
+        // }   
     }
 
     sendMessage(content) {
@@ -117,14 +142,17 @@ class WebSocketClient {
                 this.ws.send(JSON.stringify({ 
                     type: 'message',
                     content: content,
-                    userId: this.user.id,
-                    username: this.user.username
+                    token: this.token
                 }));
             } catch (error) {
                 console.error('Ошибка при отправке сообщения:', error);
                 this.errorHandlers.forEach(handler => handler(error));
             }
         }
+    }
+
+    onUsername(handler) {
+        this.usernameHandlers.add(handler);
     }
 
     onMessage(handler) {
@@ -138,10 +166,6 @@ class WebSocketClient {
 
     onConnection(handler) {
         this.connectionHandlers.add(handler);
-        // Если пользователь уже установлен, сразу вызываем обработчик
-        if (this.user) {
-            handler(this.user);
-        }
     }
 
     onError(handler) {
@@ -158,7 +182,7 @@ class WebSocketClient {
             this.messageHandlers.clear();
             this.connectionHandlers.clear();
             this.errorHandlers.clear();
-            this.user = null;
+            this.token = null;
             this.messageBuffer = [];
         }
     }

@@ -24,9 +24,16 @@ onMounted(() => {
     wsClient.logout();
     authStore.logout();
   }
+
   nextTick(() => {
     wsClient.onMessage(handleIncomingMessage);
     wsClient.onError(handleError);
+
+    wsClient.onConnection((isTrue) => {
+      if (!isTrue) {
+        authStore.logout();
+      }
+    });
   });
 });
 

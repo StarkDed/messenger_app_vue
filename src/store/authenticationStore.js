@@ -1,10 +1,11 @@
 import { defineStore } from "pinia";
+import { nextTick } from 'vue';
 import wsClient from "@/websocket/client";
 export const useAuthStore = defineStore("authentication", {
   state: () => {
     // Проверяем наличие сохраненного пользователя
-    const storedUser = localStorage.getItem('currentUser');
-    const initialUser = storedUser ? JSON.parse(storedUser) : null;
+    const storedUser = localStorage.getItem('username');
+    const initialUser = storedUser ? storedUser : null;
 
     return {
       isAuthenticated: !!initialUser,
@@ -15,17 +16,15 @@ export const useAuthStore = defineStore("authentication", {
     setUser(user) {
       this.isAuthenticated = true;
       this.currentUser = user;
-      // Сохраняем данные текущего пользователя
-      localStorage.setItem('currentUser', JSON.stringify({
-        id: user.id,
-        username: user.username
-      }));
+
+      localStorage.setItem("username", user);
     },
     logout() {
       this.isAuthenticated = false;
       this.currentUser = null;
-      // Удаляем текущего пользователя
+
       localStorage.removeItem('currentUser');
+      localStorage.removeItem('username');
     }
   }
 });

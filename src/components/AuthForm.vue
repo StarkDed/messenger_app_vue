@@ -62,9 +62,9 @@ const handleLoginRegButton = async () => {
       return;
     });
 
-    wsClient.onConnection((user) => {
-      if (user) {
-        authStore.setUser(user);
+    wsClient.onConnection((value) => {
+      if (value) {
+        authStore.setUser(username.value);
       }
       else {
         error.value = "Неверное имя пользователя или пароль";
