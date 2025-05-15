@@ -4,7 +4,6 @@ class WebSocketClient {
         this.messageHandlers = new Set();
         this.connectionHandlers = new Set();
         this.errorHandlers = new Set();
-        this.usernameHandlers = new Set();
         const storedToken = localStorage.getItem('currentUser');
         this.token = storedToken ? storedToken : null;
         this.messageBuffer = [];
@@ -66,9 +65,6 @@ class WebSocketClient {
                         this.messageBuffer.push(data);
                         this.messageHandlers.forEach(handler => handler(data));
                     }
-                    else if (data.type === 'username_response') {
-                        this.usernameHandlers.forEach(handler => handler(data.username));
-                    }
                     else if (data.type === 'jwt_error') {
                         // выходить из аккаунта
                         this.errorHandlers.forEach(handler => handler(data.message));
@@ -95,15 +91,6 @@ class WebSocketClient {
         }
     }
 
-    getUsername(token) {
-        if (this.ws && this.ws.readyState === WebSocket.OPEN) {
-            this.ws.send(JSON.stringify({
-                type: "get_username",
-                token: token
-            }));
-        }
-    }
-
     getMessageHistory() {
         if (this.ws && this.ws.readyState === WebSocket.OPEN) {
             this.ws.send(JSON.stringify({
@@ -115,25 +102,9 @@ class WebSocketClient {
 
     logout() {
         if (this.ws && this.ws.readyState === WebSocket.OPEN) {
-            // this.ws.send(JSON.stringify({
-            //     type: 'logout'
-            // }));
-
             this.connectionHandlers.forEach(handler => handler(false));
             this.disconnect();
         }
-
-        // this.ws.onmessage = (event) => {
-        //     const data = JSON.parse(event.data);
-        //     if (data.type === 'logout_response') {
-        //         if (data.success) {
-                    
-        //         }
-        //         else {
-        //             this.errorHandlers.forEach(handler => handler(data.message));
-        //         }
-        //     }
-        // }   
     }
 
     sendMessage(content) {
@@ -149,10 +120,6 @@ class WebSocketClient {
                 this.errorHandlers.forEach(handler => handler(error));
             }
         }
-    }
-
-    onUsername(handler) {
-        this.usernameHandlers.add(handler);
     }
 
     onMessage(handler) {

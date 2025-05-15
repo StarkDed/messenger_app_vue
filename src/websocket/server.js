@@ -166,26 +166,10 @@ wss.on('connection', (ws) => {
                 ws.send(JSON.stringify({
                     type: data.type === 'register' ? 'register_response' : 'login_response',
                     success: result.success,
-                    username: result.user.username,
                     token: result.token
                 }));
                 return;
             } 
-            // else if (data.type === 'logout') {
-            //     try {
-            //         ws.send(JSON.stringify({
-            //             type: 'logout_response',
-            //             success: true
-            //         }));
-            //     } catch (error) {
-            //         console.error('Ошибка при выходе из чата:', error);
-            //         ws.send(JSON.stringify({
-            //             type: 'logout_response',
-            //             success: false,
-            //             message: 'Ошибка при выходе из чата: ' + error.message
-            //         }));
-            //     }
-            // }
             else {
                 try {
                     const decodedToken = jwt.verify(data.token, process.env.VUE_APP_VERY_SECRET_KEY) 
@@ -203,13 +187,9 @@ wss.on('connection', (ws) => {
                     return;
                 }
             }
-            if (data.type === "get_username") {
-                ws.send(JSON.stringify({
-                    type: "username_response",
-                    username: data.username
-                }));
-            }
-            else if (data.type === 'get_history') {                    
+
+
+            if (data.type === 'get_history') {                    
                 // Заменяем старое соединение на новое для корректной отправки сообщений всем пользователям
                 const userSessions = clients.get(data.username) || new Set();
                 userSessions.forEach(clientWS => {
@@ -225,7 +205,6 @@ wss.on('connection', (ws) => {
                     type: 'history',
                     messages: dbMessageHistory.map(msg => ({
                         ...msg,
-                        username: data.username,
                         isMine: msg.username === data.username
                     }))
                 }));
